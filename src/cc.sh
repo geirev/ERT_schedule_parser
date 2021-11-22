@@ -1,2 +1,2 @@
-cc  parcer.c -o schedule_parcer
-cp schedule_parcer ~/bin
+cc  parser.c -o schedule_parser
+cp schedule_parser ~/bin
