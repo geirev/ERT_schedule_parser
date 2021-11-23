@@ -19,10 +19,13 @@ int main(int argc, char** argv)
    ssize_t read;
    int nrlines=0;
 
-   char histinfile[200];
-   char histoutfile[200];
-   char Cfile[200];
-   int nrwells, nrdata, nx;
+   char histinfile[200];  // Name of input schedule file
+   char histoutfile[200]; // Name of output schedule file
+   char Wfile[200];       // list of well names written by ERT_ratesamp
+   char Cfile[200];       // Name of CONTROL file written by ERT_ratesamp
+   int nrwells;           // Number of wells
+   int nx;                // Number of DATES keywords in schedule file
+   int nrdata;            // Fluids defaults to 3 (OPR, WPR, GPR)
 
 /*********************************************************************************
 * Processing arguments:
@@ -43,14 +46,36 @@ int main(int argc, char** argv)
    sscanf(argv[3], "%s", Cfile);
    printf("CONTROL file     : %s\n", Cfile);
 
-   sscanf(argv[4], "%d", &nx);
+   sscanf(argv[4], "%s", Wfile);
+   printf("Wellinfo file    : %s\n", Wfile);
+
+   sscanf(argv[5], "%d", &nx);
    printf("Number of DATES  : %d\n", nx);
 
-   sscanf(argv[5], "%d", &nrwells);
+//   sscanf(argv[6], "%d", &nrwells);
+//   printf("Number of wells  : %d\n", nrwells);
+
+   nrdata=3; // OPR, WPR, GPR
+
+/*********************************************************************************/
+// Open and read wellinfo file located in the ERT run directory
+   printf("Reading =%s \n", Wfile);
+   FILE* fpw = fopen(Wfile, "r");
+   if (fpw == NULL) { printf("fopen failed to open the file %s\n", Wfile); exit(-1); }
+
+   nrlines=0;
+   while ((read = getline(&line, &len, fpw)) != -1) { nrlines++; }
+   rewind(fpw);
+   nrwells=nrlines;
    printf("Number of wells  : %d\n", nrwells);
 
-   nrdata=3;
-
+   char wellname[nrwells][8];
+   for(int i = 0; i < nrwells; i++){
+      fgets(wellname[i], 8, fpw);
+      wellname[i][strcspn(wellname[i], "\n")] = 0;
+      printf("well  :+%d+%s+\n", i, wellname[i]);
+   }
+   fclose(fpw);
 
 /*********************************************************************************/
 // Open and read CONTROL file
@@ -78,9 +103,10 @@ int main(int argc, char** argv)
    if (fp == NULL) { printf("fopen failed to open the file %s\n", histinfile); exit(-1); }
 
 // Count number of lines in history.sch file
+   nrlines=0;
    while ((read = getline(&line, &len, fp)) != -1) { nrlines++; }
    rewind(fp);
-
+   printf(" nrlines in schedule file is %d\n",nrlines);
 // Read history.sch file into string
    char string[nrlines][200];
    for (int i=0; i< nrlines; i++){
@@ -94,6 +120,8 @@ int main(int argc, char** argv)
    int i=0;
    int k=0;
    while (i < nrlines){
+      printf(" processing line %d of shedule file\n",i);
+
       fprintf(fpout,"%s",string[i]);
 
       sscanf(string[i], "%s", line);
@@ -109,18 +137,24 @@ int main(int argc, char** argv)
               i=i+1;
            } else {
               sscanf(string[i], "%s %s %s %f %f %f %[^\n]", well, open, resv, &opr, &wpr, &gpr, slash);
+              well[strcspn(well, "\n")] = 0;
               int iwell;
-              sscanf(&well[3], "%d", &iwell);
+              for (iwell=0; iwell< nrwells; iwell++){
+                 if (strcmp(well,wellname[iwell]) == 0){
+                   // printf("AAA +%s+%s+\n",well,wellname[iwell]);
+                    break;
+                 }
+               }
 
               fprintf(fpout,"--%s  %s %s %10.3f %10.3f %10.0f %s\n",well,open,resv,opr,wpr,gpr,slash);
-              float oprt=C0[k-1][0][iwell-1];
-              float wprt=C0[k-1][1][iwell-1];
-              float gprt=C0[k-1][2][iwell-1];
+              float oprt=C0[k-1][0][iwell];
+              float wprt=C0[k-1][1][iwell];
+              float gprt=C0[k-1][2][iwell];
               fprintf(fpout,"  %s  %s %s %10.3f %10.3lf %10.0f %s\n",well,open,resv,opr+oprt,fabs(wpr+wprt),gpr+gprt,slash);
-!              printf("  %s  %s %s %10.3f %10.3f %10.3lf %10.3lf %10.0f %s\n",well,open,resv,opr+oprt,oprt,fabs(wpr+wprt),wprt,gpr+gprt,slash);
+//              printf("  %s  %s %s %10.3f %10.3f %10.3lf %10.3lf %10.0f %s\n",well,open,resv,opr+oprt,oprt,fabs(wpr+wprt),wprt,gpr+gprt,slash);
 
               i=i+1;
-              sscanf(string[i], "%s[^/]", line);
+              sscanf(string[i], "%s[^/]", line); //Used for next test in while loop
            }
         }
         fprintf(fpout,"%s",string[i]);
@@ -148,4 +182,5 @@ int main(int argc, char** argv)
 
       i=i+1;
    }
+   fclose(fpout);
 }
